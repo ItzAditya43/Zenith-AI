@@ -1,0 +1,15 @@
+{
+  "id": "adityapandey444/zenith-ai-kaggle-train",
+  "title": "Zenith AI - Kaggle Train",
+  "code_file": "zenith_kaggle_train.ipynb",
+  "language": "python",
+  "kernel_type": "notebook",
+  "is_private": true,
+  "enable_gpu": true,
+  "enable_tpu": false,
+  "enable_internet": true,
+  "keywords": ["llm", "transformer", "pytorch", "from-scratch"],
+  "dataset_sources": [],
+  "kernel_sources": [],
+  "competition_sources": []
+}
