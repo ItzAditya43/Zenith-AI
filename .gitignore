@@ -1,0 +1,9 @@
+.venv/
+__pycache__/
+*.pyc
+checkpoints/
+checkpoints_smoketest/
+data/
+train.log
+*.log
+.DS_Store

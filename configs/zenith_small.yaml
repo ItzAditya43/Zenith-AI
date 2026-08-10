@@ -1,0 +1,31 @@
+seed: 1337
+
+model:
+  vocab_size: 8192
+  dim: 384
+  n_layers: 8
+  n_heads: 6
+  n_kv_heads: 2
+  hidden_dim: 1024
+  max_seq_len: 256
+  rope_theta: 10000.0
+  dropout: 0.0
+  tie_embeddings: true
+
+data:
+  train_path: data/train_packed.npy
+  val_path: data/val_packed.npy
+
+training:
+  micro_batch_size: 32
+  grad_accum_steps: 4
+  total_steps: 6000
+  warmup_steps: 200
+  max_lr: 3.0e-4
+  min_lr: 3.0e-5
+  weight_decay: 0.1
+  grad_clip: 1.0
+  checkpoint_dir: checkpoints
+  checkpoint_every: 500
+  eval_every: 250
+  log_every: 20
