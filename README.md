@@ -61,6 +61,10 @@ Grammatically coherent, holds a consistent character and plot thread across mult
 
 This repo intentionally trains a small model on a laptop GPU in about 90 minutes as a proof that the full stack works end-to-end. A genuinely capable ~125M-parameter chat model trained the same way — same code, bigger config — needs hundreds of billions of tokens and multi-GPU, multi-day compute; nothing about the architecture changes, only the config (`configs/zenith_small.yaml`) and how long you let it run.
 
+## Training on Kaggle
+
+The local run above (12.59M params, 4GB laptop GPU) is a proof that the stack works, not the ceiling. `configs/zenith_kaggle.yaml` scales the same architecture up to **75.5M params** (12 layers, dim 768, 512-token context) sized for a Kaggle T4/P100 (16GB). `kaggle/zenith_kaggle_train.ipynb` clones this repo, installs deps, runs the full data → tokenizer → pack → train → generate pipeline, and checkpoints to `/kaggle/working/checkpoints` every 500 steps so a run can be resumed across Kaggle's 12-hour session cap. Upload the notebook to Kaggle (GPU accelerator + internet on) and run it top to bottom.
+
 ## Usage
 
 ```bash
