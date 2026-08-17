@@ -85,6 +85,27 @@ This section exists because the failures were as instructive as the successes, a
 
 **None of this affects the trained model's quality** — it's entirely about getting a training job to survive a free, shared, session-capped, timeout-prone environment. The architecture, tokenizer, and training loop are the same code validated locally; what changed is everything around getting it to run unattended for hours on infrastructure designed to be interrupted.
 
+**One more, self-inflicted: pushing a Kaggle kernel doesn't push your local file edits.** The notebook does `git clone` from GitHub at the start of every session — it has no idea about uncommitted local changes. Editing `configs/zenith_kaggle.yaml` locally to go from 12 to 16 layers, then running `kaggle kernels push` *before* `git push`-ing that change to GitHub, silently retrained the old 75.5M config a second time instead of the intended 100.7M one. It wasn't wasted, though: this time the 75.5M run actually completed all 1000 steps without getting cut off (see results below) — but the lesson stands: for a notebook-clones-from-git workflow, the GitHub push has to land *before* the Kaggle push, not after or in parallel.
+
+### Results: 75.5M params, full 1000-step run (completed)
+
+Val loss / perplexity, cleanly decreasing the whole way:
+
+| Step | val_loss | perplexity |
+|---|---|---|
+| 250 | 2.9444 | 19.00 |
+| 500 | 2.1682 | 8.74 |
+| 750 | 1.8933 | 6.64 |
+| 1000 | 1.7714 | **5.88** |
+
+Sample generations at the final checkpoint:
+
+> **Once upon a time**, there was a little girl named Lily. She loved to play with her toys and eat candy. One day, Lily's mom asked her to help clean up her toys. Lily was excited to help, but she didn't want to stop playing. "I don't want to clean up," said Lily. "I want to play more," said her mom. Lily didn't want to clean up, so she got upset. "Why can't I play with your toys?" she...
+
+> **Tom and Lily went to the park**. They saw a big slide. Tom wanted to go on the slide. He asked Lily to let him go. Lily said no. They were scared. Tom said, "Don't be a baby. I will go first. I will help you." Lily said, "I will go first." She put on her shoes. She followed Tom to the slide. They went down the slide together. They were happy.
+
+Coherent dialogue, consistent character names across the whole generation, plausible (if simple) plot logic — a genuinely finished, working checkpoint. This is the first run in this whole process that completed a full training schedule on Kaggle without being cut off by the session timeout, crashing on a GPU mismatch, or failing to find its own source code.
+
 ## Usage
 
 ```bash
