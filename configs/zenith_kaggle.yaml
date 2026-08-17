@@ -2,8 +2,14 @@ seed: 1337
 
 model:
   vocab_size: 8192
+  # 16 layers x dim 768 = ~100.7M params (verified via ZenithTransformer.num_params()).
+  # The 12-layer/75.5M run validated the architecture and data pipeline on Kaggle
+  # (val ppl 19.0 -> 8.75 -> 6.60 over steps 250/500/750, cleanly improving, no
+  # instability) before it was cancelled around step ~1500/3000 by the session
+  # limit — scaling depth (not width) tends to help small-LM quality more per
+  # added param at this scale.
   dim: 768
-  n_layers: 12
+  n_layers: 16
   n_heads: 12
   n_kv_heads: 4
   hidden_dim: 2048
@@ -19,15 +25,18 @@ data:
 training:
   micro_batch_size: 16
   grad_accum_steps: 8
-  # Sized for a single Kaggle free GPU commit session. The 15k-step run is
-  # better handled as multiple resumed sessions from saved checkpoints.
-  total_steps: 1200
-  warmup_steps: 300
+  # The 75.5M/12-layer run measured ~3780 tok/s on a shared/throttled Kaggle T4.
+  # This 100.7M/16-layer model does ~1.33x more FLOPs/token, so budget for
+  # ~2800 tok/s -> ~23s/step. 1000 steps -> ~6.4h, leaving headroom under a
+  # single ~9h Kaggle commit session (vs. the previous 3000-step run, which
+  # needed ~14.4h and never finished in one session).
+  total_steps: 1000
+  warmup_steps: 200
   max_lr: 3.0e-4
   min_lr: 3.0e-5
   weight_decay: 0.1
   grad_clip: 1.0
   checkpoint_dir: /kaggle/working/checkpoints
-  checkpoint_every: 500
-  eval_every: 250
+  checkpoint_every: 250
+  eval_every: 200
   log_every: 20
