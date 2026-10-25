@@ -53,7 +53,7 @@ def cmd_evaluate(args):
 
 def cmd_tokenize(args):
     sys.argv = ["train_tokenizer.py", "--input", *args.input, "--output", args.output,
-                "--vocab-size", str(args.vocab_size)]
+                "--model", args.model] + (["--vocab-size", str(args.vocab_size)] if args.vocab_size else [])
     from zenith.tokenizer.train_tokenizer import main as tok_main
     tok_main()
 
@@ -81,10 +81,11 @@ def main():
     p_eval.add_argument("--batch-size", type=int, default=16)
     p_eval.set_defaults(func=cmd_evaluate)
 
-    p_tok = sub.add_parser("tokenize", help="Train a BPE tokenizer")
+    p_tok = sub.add_parser("tokenize", help="Train a tokenizer (Unigram by default, BPE optional)")
     p_tok.add_argument("--input", nargs="+", required=True)
     p_tok.add_argument("--output", required=True)
-    p_tok.add_argument("--vocab-size", type=int, default=8192)
+    p_tok.add_argument("--vocab-size", type=int, default=None)
+    p_tok.add_argument("--model", choices=["bpe", "unigram"], default="unigram")
     p_tok.set_defaults(func=cmd_tokenize)
 
     args = ap.parse_args()

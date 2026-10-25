@@ -1,0 +1,52 @@
+seed: 1337
+
+model:
+  # ~17.8M params: 10.2M in the tied embedding, ~7.6M in the layers. ~18MB at int8.
+  vocab_size: 32000
+  dim: 320
+  n_layers: 7
+  n_heads: 5
+  n_kv_heads: 1           # one KV head keeps the phone-side cache tiny
+  hidden_dim: 864
+  max_seq_len: 64         # a keyboard only needs the recent sentence
+  rope_theta: 10000.0
+  dropout: 0.0
+  tie_embeddings: true
+
+data:
+  # built by: python -m zenith.data.keyboard_corpus {download,clean,pack}
+  # rows are 65 tokens (64 inputs + shifted target), each starting with <en>/<es>/<ja>
+  train_path: data_kb/train.npy
+  val_path: data_kb/val.npy
+  val_paths_by_lang:
+    en: data_kb/val_en.npy
+    es: data_kb/val_es.npy
+    ja: data_kb/val_ja.npy
+
+training:
+  # The plan's 256 x 2 micro-batching doesn't fit 4GB: 256x64 positions x 32k
+  # vocab of fp32 logits is ~2GB, plus their gradient. 64 x 8 keeps the same
+  # effective batch (512 seqs = 32,768 tokens/step).
+  micro_batch_size: 64
+  grad_accum_steps: 8
+  total_steps: 40000      # ~1.31B tokens
+  warmup_steps: 1000
+  max_lr: 1.0e-3
+  min_lr: 1.0e-4
+  weight_decay: 0.1
+  grad_clip: 1.0
+  compile: true
+  num_workers: 2
+  cpu_threads: 2         # keep the CPU cool; the GPU does the work
+  blocking_sync: true    # CPU sleeps instead of spinning while waiting on the GPU
+  # This laptop's CPU and GPU share cooling: pause between steps before the
+  # thermal watchdog's limits (acpitz 78C / Tctl 85C) so it never has to stop
+  # the run. Linux hwmon chip names.
+  thermal_throttle:
+    sensors: [acpitz, k10temp]
+    pause_c: 74
+    resume_c: 68
+  checkpoint_dir: checkpoints_kb
+  checkpoint_every: 1000
+  eval_every: 1000
+  log_every: 50

@@ -1,0 +1,49 @@
+{
+  "checkpoint": "checkpoints_kb/latest.pt",
+  "step": 40000,
+  "en": {
+    "next_word_top3": {
+      "zenith": 0.36720943290286356,
+      "bigram": 0.2085906793935991,
+      "n": 3562
+    },
+    "prefix_top3": {
+      "zenith": 0.7498477651930338,
+      "bigram": 0.6295213737668981,
+      "n": 8211
+    },
+    "keystroke_savings": {
+      "zenith": 0.5119515389652914,
+      "bigram": 0.4336935166994106
+    }
+  },
+  "es": {
+    "next_word_top3": {
+      "zenith": 0.33626926706511484,
+      "bigram": 0.19911921988046555,
+      "n": 3179
+    },
+    "prefix_top3": {
+      "zenith": 0.6898011002962336,
+      "bigram": 0.5687685146000846,
+      "n": 7089
+    },
+    "keystroke_savings": {
+      "zenith": 0.5028962611901,
+      "bigram": 0.4207477619799895
+    }
+  },
+  "ja": {
+    "kanji_choice_top1": {
+      "zenith": 0.82,
+      "mozc_order": 0.613,
+      "bigram": 0.863,
+      "n": 1000
+    },
+    "next_phrase_top3": {
+      "zenith": 0.412,
+      "bigram": 0.415,
+      "n": 1000
+    }
+  }
+}

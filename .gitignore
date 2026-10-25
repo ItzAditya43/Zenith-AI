@@ -12,3 +12,7 @@ train_100m.log
 # Machine-specific local tooling (hardcoded to this laptop's sensor layout),
 # not part of the portable project.
 /scripts/
+/data_kb/
+/checkpoints_kb/
+/export/zenith_kb_fp32.onnx
+/export/*.log

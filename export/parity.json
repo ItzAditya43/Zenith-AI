@@ -1,0 +1,23 @@
+{
+  "en": {
+    "top5_match": 0.805078125,
+    "top1_match": 0.953125,
+    "fp32_top1_in_int8_top3": 0.99921875,
+    "positions": 2560,
+    "ms_per_step_pc_cpu": 2.0356669992906973
+  },
+  "es": {
+    "top5_match": 0.762890625,
+    "top1_match": 0.93828125,
+    "fp32_top1_in_int8_top3": 0.99609375,
+    "positions": 2560,
+    "ms_per_step_pc_cpu": 2.383309503784403
+  },
+  "ja": {
+    "top5_match": 0.7609375,
+    "top1_match": 0.9421875,
+    "fp32_top1_in_int8_top3": 0.99453125,
+    "positions": 2560,
+    "ms_per_step_pc_cpu": 2.027801994699985
+  }
+}

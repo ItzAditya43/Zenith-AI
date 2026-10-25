@@ -2,8 +2,13 @@ import os
 import torch
 
 
+def _unwrap(model):
+    model = model.module if hasattr(model, "module") else model
+    return getattr(model, "_orig_mod", model)  # torch.compile wrapper
+
+
 def save_checkpoint(path, model, optimizer, step, cfg, extra=None):
-    raw_model = model.module if hasattr(model, "module") else model
+    raw_model = _unwrap(model)
     payload = {
         "model": raw_model.state_dict(),
         "optimizer": optimizer.state_dict(),
@@ -19,7 +24,7 @@ def save_checkpoint(path, model, optimizer, step, cfg, extra=None):
 
 def load_checkpoint(path, model, optimizer=None, map_location="cpu"):
     payload = torch.load(path, map_location=map_location, weights_only=False)
-    raw_model = model.module if hasattr(model, "module") else model
+    raw_model = _unwrap(model)
     raw_model.load_state_dict(payload["model"])
     if optimizer is not None and "optimizer" in payload:
         optimizer.load_state_dict(payload["optimizer"])
