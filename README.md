@@ -2,6 +2,8 @@
 
 A small language model, and the full stack around it — tokenizer, transformer, training loop, inference engine, and CLI — built and trained entirely from scratch. No pretrained weights, no external model APIs. This repo is both the implementation and a report on what it took to get a from-scratch LLM talking on a single consumer laptop GPU.
 
+It now also contains **Zenith Keyboard**: a 17.8M-parameter English/Spanish/Japanese model trained from scratch to power next-word prediction, autocorrect and kanji choice in an Android keyboard, exported to an 18.3 MB int8 ONNX file (see [Zenith Keyboard](#zenith-keyboard-an-on-device-model-for-a-phone-keyboard)).
+
 ## Why this exists
 
 Most "build an LLM" exercises stop at wiring together a HuggingFace `Trainer` and someone else's weights. The point here was different: implement every layer of the stack by hand — attention, positional encoding, normalization, the optimizer schedule, the KV cache, the sampler — well enough that a real checkpoint comes out the other end and produces text you can hold a conversation with. The goal wasn't to compete with GPT-class models; it was to understand, and prove, that every piece works by actually training something and reading its output.
@@ -10,13 +12,15 @@ Most "build an LLM" exercises stop at wiring together a HuggingFace `Trainer` an
 
 ```
 zenith/
-├── tokenizer/     BPE tokenizer training (byte-level, trained from scratch)
-├── data/          Corpus download + tokenize-and-pack pipeline
+├── tokenizer/     Tokenizer training from scratch: byte-level BPE, or Unigram + byte fallback (multilingual)
+├── data/          Corpus download + tokenize-and-pack (TinyStories; keyboard_corpus.py for EN/ES/JA)
 ├── model/         RMSNorm, RoPE, grouped-query attention, SwiGLU, KV cache, transformer
 ├── training/      AdamW, cosine LR schedule, AMP, gradient accumulation, checkpointing, DDP hook
 ├── inference/      Autoregressive generation with KV cache, temperature/top-k/top-p sampling
-├── evaluation/     Held-out loss / perplexity
+├── evaluation/     Held-out loss / perplexity; keyboard_eval.py (next-word, prefix, keystroke savings, kanji choice)
+├── export/         ONNX export with explicit KV cache, mixed int8 quantization, parity test, phone tokenizer
 └── cli.py          `zenith train|chat|evaluate|tokenize`
+export/             Shipped keyboard model, tokenizer, eval results, MyKey integration guide (PDF)
 ```
 
 ## Architecture
@@ -130,6 +134,41 @@ Everything else learned from the Kaggle runs — size `total_steps` to the throu
 
 **The real bug: every restart replayed the same training batches.** With the safety system now cycling the process every few minutes on this chassis, a bug that would've been invisible in one continuous run became obvious: `train.py` calls `torch.manual_seed(seed)` at the start of every process launch for reproducible model init, but the training `DataLoader`'s shuffle order was drawing from that same global RNG — so every restart reset the shuffle to the exact same permutation and replayed the same early batches instead of progressing through the dataset. Caught by watching train/val loss diverge: training loss collapsed toward 0 (the model trivially memorizing a small repeated slice) while validation perplexity got *worse* over the same steps (19.0 → 24.2) — the textbook overfitting signature, except the "overfitting" was actually overfitting to a bug, not real training progress. Fixed by giving the `DataLoader` its own `torch.Generator` seeded from OS entropy (`os.urandom`), decoupled from the reproducible seed used for model initialization — verified directly (two simulated "process restarts" with the same fixed seed now draw different shuffle orders) before trusting it. The corrupted checkpoint was discarded in favor of the last one saved before the restart cycling began.
 
+## Zenith Keyboard: an on-device model for a phone keyboard
+
+**Goal** (from the plan): a model small enough to run offline inside the MyKey Android keyboard that understands the whole sentence, not just the last word. Budget: at most 20 MB, at most 30 ms per prediction, at most 70 MB of RAM, 64-token context. Languages: English, Spanish and Japanese, with Russian and Mandarin token slots reserved.
+
+**Model.** 17.8M parameters (7 layers, dim 320, 5 query heads / 1 KV head, SwiGLU 864, RoPE, tied 32k embedding), `configs/zenith_keyboard.yaml`.
+
+**Data** (`zenith/data/keyboard_corpus.py`). Sources: OpenSubtitles (casual dialogue), Tatoeba, Wikipedia first paragraphs, and CC-100 for informal Japanese. Cleaning: NFKC normalisation, then dropping URLs, digit-heavy lines and lines over 200 characters. The result is 911M unique tokens, mixed to 1.34B training tokens at 35% English, 30% Spanish and 35% Japanese (the smaller corpora are repeated). Every 64-token row starts with `<en>`/`<es>`/`<ja>`, because that's exactly what the keyboard sends.
+
+**Tokenizer.** Unigram + Metaspace + byte fallback + NFKC, 32k vocabulary. Byte-level BPE splits on spaces, and Japanese has none. Results: 1.36 tokens/word for English, 1.47 for Spanish, and 1.9 to 2.2 characters/token for Japanese, with no `<unk>`.
+
+**Training.** 40,000 steps × 32,768 tokens with bf16 and `torch.compile` (about 43k tok/s on the RTX 3050). Final validation perplexity: English 47.0, Spanish 50.2, Japanese 117.6.
+
+**Keyboard eval** (`zenith/evaluation/keyboard_eval.py`, held-out subtitle sentences, 150 per language). The int8 column scores the shipped ONNX file itself.
+
+| Metric | Zenith fp32 | Zenith int8 | Word bigram | Plan target |
+|---|---|---|---|---|
+| English next-word top-3 | 36.7% | 36.6% | 20.8% | ≥ 35% ✅ |
+| English prefix top-3 (1-3 letters typed) | 74.8% | 74.7% | 62.7% | ≥ 70% ✅ |
+| English keystroke savings | 53.0% | 53.2% | 44.9% | |
+| Spanish next-word top-3 | 34.2% | | 19.1% | ≥ 30% ✅ |
+| Spanish prefix top-3 | 68.2% | | 56.1% | ≥ 70% (just missed) |
+| Japanese kanji choice top-1 (Mozc candidates) | 81.0% | | 88.0% | beat Mozc order 59.6% ✅ |
+| Japanese next-phrase top-3 | 41.2% | | 43.8% | |
+
+Zenith clearly beats the bigram baseline on English and Spanish. On Japanese it beats Mozc's own candidate order, but not an in-domain word bigram, so on the phone it is meant to be *combined* with Mozc cost and user history rather than to replace them.
+
+**Export** (`zenith/export/`). The result is `export/zenith_kb.onnx` at **18.3 MB**, about 2 ms per keystroke step on a PC CPU, with the KV cache as explicit inputs/outputs. int8 top-1 agrees with fp32 on 94 to 95% of positions, and the fp32 top-1 is in the int8 top-3 99.5% of the time. The stricter identical-top-5 test is 76 to 80%. `export/ZENITH_MYKEY_INTEGRATION.pdf` is the integration guide for the Android side.
+
+Things that went wrong and how they were fixed:
+
+- **Naive int8 broke the trained model.** ONNX Runtime dynamic quantization gave under 5% top-5 parity, although the same pipeline had looked fine on an early checkpoint. Quantizing one layer group at a time showed the SwiGLU down-projections were the cause (input max/median about 450×; quantizing them alone dropped logit correlation to 0.45). Fix: the transformer layers use int8 *weight-only* quantization (`DequantizeLinear` into an fp32 MatMul). The 32k output head stays dynamic int8, after **SmoothQuant** (alpha 0.7) flattens its input outliers. That took Japanese parity from 34% to 76%.
+- **Tied embeddings were stored twice.** The exporter wrote the embedding table and a transposed copy for the head, giving 28.5 MB. The head's per-output-channel scales are exactly per-token embedding scales, so after quantization the embedding lookup is rebuilt as a `Gather` on the head's int8 matrix plus a 1/s multiply to undo SmoothQuant. That brought it to 18.3 MB.
+- **Token healing.** Japanese next-phrase predictions were poor whenever the context ended inside a token (「今日」, when training always saw 「今日は」 as one piece). Dropping the last context token and constraining the continuation to re-spell it took test cases from 2 of 9 to 6 of 9 hits. The phone side needs the same trick.
+- **Laptop thermals.** On the balanced power profile the CPU passed the watchdog's limits within 30 seconds, and each restart re-ran `torch.compile` and heated it up again. The fixes were the power-saver profile (which leaves GPU speed unchanged), blocking CUDA sync (so the CPU stops spin-waiting), and an in-loop `thermal_throttle` that pauses between steps at 74°C and resumes at 68°C. With those, the run never tripped the watchdog. Later, a closed lid exposed a gap in auto-resume: it relaunched into a closed lid every 25 seconds. It now waits for the lid to open.
+
 ## Usage
 
 ```bash
@@ -138,7 +177,7 @@ pip install -r requirements.txt
 
 # 1. Get data and train a tokenizer
 python -m zenith.data.prepare dump --output-dir data
-python -m zenith.tokenizer.train_tokenizer --input data/train.txt --output data/tokenizer.json --vocab-size 8192
+python -m zenith.tokenizer.train_tokenizer --model bpe --input data/train.txt --output data/tokenizer.json --vocab-size 8192
 
 # 2. Tokenize + pack into training shards
 python -m zenith.data.prepare pack --input data/train.txt --tokenizer data/tokenizer.json --output data/train_packed.npy --seq-len 256
@@ -153,3 +192,21 @@ python -m zenith.cli chat checkpoints/latest.pt --tokenizer data/tokenizer.json
 # 5. Evaluate
 python -m zenith.cli evaluate checkpoints/latest.pt --val-path data/val_packed.npy
 ```
+
+### Zenith Keyboard pipeline
+
+```bash
+python -m zenith.data.keyboard_corpus download        # ~2.3 GB into data_kb/raw (parallel, resumable)
+python -m zenith.data.keyboard_corpus clean
+python -m zenith.tokenizer.train_tokenizer --input data_kb/tok_sample/*.txt --output data_kb/tokenizer_kb.json   # Unigram, 32k
+python -m zenith.data.keyboard_corpus pack            # -> data_kb/train.npy, val_{en,es,ja}.npy
+python -m zenith.training.train configs/zenith_keyboard.yaml
+python -m zenith.evaluation.keyboard_eval checkpoints_kb/latest.pt --output export/keyboard_eval.json
+python -m zenith.export.export_onnx checkpoints_kb/latest.pt   # fp32 ONNX + SmoothQuant head
+python -m zenith.export.quantize                               # -> export/zenith_kb.onnx
+python -m zenith.export.export_tokenizer                       # -> export/zenith_kb.tok
+python -m zenith.export.parity_test checkpoints_kb/latest.pt
+python -m zenith.evaluation.keyboard_eval checkpoints_kb/latest.pt --onnx export/zenith_kb.onnx   # eval the shipped file
+```
+
+`data_kb/tok_sample/` (made by hand for this run; there is no command for it yet) is a balanced ~110 MB random sample of the cleaned text (about 30 MB each of English and Spanish, 50 MB of Japanese). Keep Japanese at 40% or more, or its pieces degrade to single characters.

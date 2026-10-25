@@ -4,3 +4,9 @@ datasets
 numpy
 tqdm
 pyyaml
+# keyboard model: corpus, eval, export
+pyarrow
+fugashi
+unidic-lite
+onnx
+onnxruntime
